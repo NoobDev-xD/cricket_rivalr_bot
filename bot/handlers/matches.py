@@ -31,6 +31,158 @@ async def newmatch(message: Message):
 
     await message.answer(
         "🏆 CRICKET RIVALRY\n\nSelect match overs:",
+
+        @router.callback_query(F.data.startswith("run:"))
+async def add_runs(call: CallbackQuery):
+
+    _, match_id, value = call.data.split(":")
+
+    await update_score(
+        call,
+        int(match_id),
+        int(value)
+    )
+
+
+@router.callback_query(F.data.startswith("wicket:"))
+async def add_wicket(call: CallbackQuery):
+
+    match_id = int(call.data.split(":")[1])
+
+    await update_score(
+        call,
+        match_id,
+        0,
+        wicket=True
+    )
+
+
+@router.callback_query(F.data.startswith("extra:"))
+async def add_extra(call: CallbackQuery):
+
+    _, match_id, extra = call.data.split(":")
+
+    await update_score(
+        call,
+        int(match_id),
+        1,
+        extra=extra,
+        legal=False
+    )
+
+
+async def update_score(
+    call,
+    match_id,
+    runs,
+    wicket=False,
+    extra=None,
+    legal=True
+):
+
+    celebrations = []
+
+    async with SessionLocal() as session:
+
+        match = await session.get(Match, match_id)
+
+        if not match:
+            await call.answer("Match not found.")
+            return
+
+        if match.status != "live":
+            await call.answer("Match is not live.")
+            return
+
+        if match.bowler_id != call.from_user.id:
+            await call.answer(
+                "Only the selected bowler can submit this delivery.",
+                show_alert=True
+            )
+            return
+
+        old_batter_runs = match.batter_runs
+        old_partnership = match.partnership_runs
+
+        match.runs += runs
+
+        if extra is None:
+            match.batter_runs += runs
+
+        match.partnership_runs += runs
+
+        if runs == 4 and extra is None:
+            celebrations.append("four")
+
+        if runs == 6 and extra is None:
+            celebrations.append("six")
+
+        if old_batter_runs < 50 <= match.batter_runs:
+            celebrations.append("fifty")
+
+        if old_batter_runs < 100 <= match.batter_runs:
+            celebrations.append("hundred")
+
+        if old_partnership < 50 <= match.partnership_runs:
+            celebrations.append("partnership_fifty")
+
+        if old_partnership < 100 <= match.partnership_runs:
+            celebrations.append("partnership_hundred")
+
+        if wicket:
+            match.wickets += 1
+            match.partnership_runs = 0
+
+        if legal:
+            match.legal_balls += 1
+
+        session.add(
+            BallEvent(
+                match_id=match_id,
+                over_number=match.legal_balls // 6,
+                ball_number=match.legal_balls % 6,
+                batter_id=match.striker_id,
+                bowler_id=match.bowler_id,
+                runs=runs,
+                extra_type=extra,
+                wicket=wicket
+            )
+        )
+
+        if (
+            match.wickets >= match.wickets_limit
+            or match.legal_balls >= match.overs * 6
+        ):
+            match.status = "innings_complete"
+
+        score = f"{match.runs}/{match.wickets}"
+
+        overs = (
+            f"{match.legal_balls // 6}."
+            f"{match.legal_balls % 6}"
+        )
+
+        complete = match.status == "innings_complete"
+
+        await session.commit()
+
+    await call.message.answer(
+        f"🏏 CRICKET SCORE\n\n"
+        f"Score: {score}\n"
+        f"Overs: {overs}\n"
+        f"Runs: {runs}\n"
+        f"Wicket: {'YES' if wicket else 'NO'}"
+        + ("\n🏆 INNINGS COMPLETED!" if complete else "")
+    )
+
+    for event in celebrations:
+        await send_event_media(
+            call.bot,
+            call.message.chat.id,
+            event
+        )
+
+    await call.answer("Score updated!")
         reply_markup=overs_kb()
     )
 
