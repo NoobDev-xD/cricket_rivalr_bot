@@ -21,14 +21,12 @@ pending_overs = {}
 
 def admin_kb(match_id):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="👑 Change Host",
-            callback_data=f"admin:host:{match_id}"
-        )],
-        [InlineKeyboardButton(
-            text="🏅 Change Captain",
-            callback_data=f"admin:captain:{match_id}"
-        )],
+        [
+            InlineKeyboardButton(
+                text="👑 Change Host",
+                callback_data=f"admin:host:{match_id}"
+            )
+        ]
     ])
 
 
