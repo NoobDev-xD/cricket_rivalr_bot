@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+
     bot_token: str
     database_url: str
 
@@ -33,3 +34,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Railway PostgreSQL URL compatibility
+if settings.database_url.startswith("postgres://"):
+    settings.database_url = settings.database_url.replace(
+        "postgres://",
+        "postgresql+asyncpg://",
+        1
+    )
+
+elif settings.database_url.startswith("postgresql://"):
+    settings.database_url = settings.database_url.replace(
+        "postgresql://",
+        "postgresql+asyncpg://",
+        1
+    )
+    
