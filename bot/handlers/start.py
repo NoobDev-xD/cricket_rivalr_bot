@@ -1,12 +1,11 @@
+
 from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
-
 from sqlalchemy import select
 
 from bot.db import SessionLocal
 from bot.models import User
-
 
 router = Router()
 
@@ -25,7 +24,6 @@ async def start(message: Message):
         user = result.scalar_one_or_none()
 
         if user is None:
-
             session.add(
                 User(
                     telegram_id=message.from_user.id,
@@ -38,10 +36,14 @@ async def start(message: Message):
 
     await message.answer(
         "🏏 WELCOME TO CRICKET RIVALRY BOT!\n\n"
-        "Commands:\n"
-        "/newmatch - Create match\n"
+        "📋 MATCH COMMANDS\n"
+        "/newmatch - Create a new match\n"
+        "/admin - Host / Group Admin panel\n"
+        "/captainpanel - Captain control panel\n\n"
+        "🏏 PLAYER COMMANDS\n"
         "/selectbatter - Select batsman\n"
         "/selectbowler - Select bowler\n\n"
-        "You are registered!\n"
+        "✅ You are registered!\n"
         "You can now receive bowling notifications."
     )
+    
