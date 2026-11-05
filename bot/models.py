@@ -1,8 +1,13 @@
+
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Integer, String,
-    DateTime, ForeignKey, Boolean
+    BigInteger,
+    Integer,
+    String,
+    DateTime,
+    ForeignKey,
+    Boolean
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -42,7 +47,15 @@ class Match(Base):
         BigInteger, index=True
     )
 
-    created_by: Mapped[int] = mapped_column(BigInteger)
+    created_by: Mapped[int] = mapped_column(
+        BigInteger
+    )
+
+    # New Host permission field
+    # Nullable temporarily for existing database compatibility
+    host_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
 
     overs: Mapped[int] = mapped_column(Integer)
 
@@ -56,7 +69,9 @@ class Match(Base):
         String(1), default="A"
     )
 
-    runs: Mapped[int] = mapped_column(Integer, default=0)
+    runs: Mapped[int] = mapped_column(
+        Integer, default=0
+    )
 
     batter_runs: Mapped[int] = mapped_column(
         Integer, default=0
@@ -66,7 +81,9 @@ class Match(Base):
         Integer, default=0
     )
 
-    wickets: Mapped[int] = mapped_column(Integer, default=0)
+    wickets: Mapped[int] = mapped_column(
+        Integer, default=0
+    )
 
     legal_balls: Mapped[int] = mapped_column(
         Integer, default=0
@@ -104,11 +121,17 @@ class Team(Base):
         ForeignKey("matches.id", ondelete="CASCADE")
     )
 
-    name: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(
+        String(64)
+    )
 
-    captain_id: Mapped[int] = mapped_column(BigInteger)
+    captain_id: Mapped[int] = mapped_column(
+        BigInteger
+    )
 
-    side: Mapped[str] = mapped_column(String(1))
+    side: Mapped[str] = mapped_column(
+        String(1)
+    )
 
 
 class TeamMember(Base):
@@ -122,9 +145,13 @@ class TeamMember(Base):
         ForeignKey("teams.id", ondelete="CASCADE")
     )
 
-    telegram_id: Mapped[int] = mapped_column(BigInteger)
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger
+    )
 
-    display_name: Mapped[str] = mapped_column(String(128))
+    display_name: Mapped[str] = mapped_column(
+        String(128)
+    )
 
     is_captain: Mapped[bool] = mapped_column(
         Boolean, default=False
@@ -142,9 +169,13 @@ class BallEvent(Base):
         ForeignKey("matches.id", ondelete="CASCADE")
     )
 
-    over_number: Mapped[int] = mapped_column(Integer)
+    over_number: Mapped[int] = mapped_column(
+        Integer
+    )
 
-    ball_number: Mapped[int] = mapped_column(Integer)
+    ball_number: Mapped[int] = mapped_column(
+        Integer
+    )
 
     batter_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
@@ -154,7 +185,9 @@ class BallEvent(Base):
         BigInteger, nullable=True
     )
 
-    runs: Mapped[int] = mapped_column(Integer, default=0)
+    runs: Mapped[int] = mapped_column(
+        Integer, default=0
+    )
 
     extra_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True
@@ -167,3 +200,4 @@ class BallEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
+    
