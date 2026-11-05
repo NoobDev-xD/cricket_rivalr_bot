@@ -156,228 +156,6 @@ def parse_callback_int(value):
     except (ValueError, TypeError):
         return None
 
-# ============== CREATE MATCH ==============
-
-@router.message(Command("newmatch"))
-async def new_match(message: Message):
-    if message.chat.type not in ("group", "supergroup"):
-        await message.answer(
-            "Create a match inside your Telegram group."
-        )
-        return
-
-    async with SessionLocal() as session:
-        active = await get_active_match(
-            session, message.chat.id
-        )
-
-        if active:
-            await message.answer(
-                "A match is already running or being set up."
-            )
-            return
-
-        match = Match(
-            chat_id=message.chat.id,
-            created_by=message.from_user.id,
-            host_id=message.from_user.id,
-            overs=0,
-            wickets_limit=0,
-            status="setup"
-        )
-
-        session.add(match)
-        await session.commit()
-        await session.refresh(match)
-
-        await message.answer(
-            "🏏 New match created!\n\n"
-            "Choose the number of overs:",
-            reply_markup=overs_kb()
-        )
-
-
-# ============== SELECT OVERS ==============
-
-@router.callback_query(F.data.startswith("overs:"))
-async def set_overs(call: CallbackQuery):
-    value = parse_callback_int(
-        call.data.split(":")[1]
-    )
-
-    if value not in (2, 5, 10, 15, 20, 50):
-        await call.answer(
-            "Invalid overs selection!",
-            show_alert=True
-        )
-        return
-
-    async with SessionLocal() as session:
-        match = await get_active_match(
-            session, call.message.chat.id
-        )
-
-        if not match or match.status != "setup":
-            await call.answer(
-                "No match setup found!",
-                show_alert=True
-            )
-            return
-
-        if match.created_by != call.from_user.id:
-            await call.answer(
-                "Only match creator can set overs!",
-                show_alert=True
-            )
-            return
-
-        match.overs = value
-        await session.commit()
-
-        await call.message.edit_text(
-            f"🏏 Overs selected: {value}\n\n"
-            "Choose wickets:",
-            reply_markup=wickets_kb()
-        )
-
-        await call.answer()
-
-
-# ============== SELECT WICKETS ==============
-
-@router.callback_query(F.data.startswith("wickets:"))
-async def set_wickets(call: CallbackQuery):
-    value = parse_callback_int(
-        call.data.split(":")[1]
-    )
-
-    if value not in (1, 2, 5, 10):
-        await call.answer(
-            "Invalid wickets selection!",
-            show_alert=True
-        )
-        return
-
-    async with SessionLocal() as session:
-        match = await get_active_match(
-            session, call.message.chat.id
-        )
-
-        if not match or match.status != "setup":
-            await call.answer(
-                "No match setup found!",
-                show_alert=True
-            )
-            return
-
-        if match.created_by != call.from_user.id:
-            await call.answer(
-                "Only match creator can set wickets!",
-                show_alert=True
-            )
-            return
-
-        if not match.overs:
-            await call.answer(
-                "Select overs first!",
-                show_alert=True
-            )
-            return
-
-        match.wickets_limit = value
-        await session.commit()
-
-        await call.message.edit_text(
-            f"🏏 Match Settings\n"
-            f"Overs: {match.overs}\n"
-            f"Wickets: {value}\n\n"
-            "Teams can now join!",
-            reply_markup=team_kb(match.id)
-        )
-
-        await call.answer()
-
-
-# ============== JOIN TEAM ==============
-
-@router.callback_query(F.data.startswith("join:"))
-async def join_team(call: CallbackQuery):
-    parts = call.data.split(":")
-    match_id = parse_callback_int(parts[1])
-    side = parts[2] if len(parts) > 2 else None
-
-    if side not in ("A", "B") or not match_id:
-        await call.answer(
-            "Invalid team selection!",
-            show_alert=True
-        )
-        return
-
-    async with SessionLocal() as session:
-        result = await session.execute(
-            select(Match).where(Match.id == match_id)
-        )
-        match = result.scalar_one_or_none()
-
-        if not match or match.status != "setup":
-            await call.answer(
-                "Match is not accepting players!",
-                show_alert=True
-            )
-            return
-
-        if not await require_group_message(call, match):
-            return
-
-        result = await session.execute(
-            select(Team).where(
-                Team.match_id == match.id,
-                Team.side == side
-            )
-        )
-        team = result.scalar_one_or_none()
-
-        if not team:
-            team = Team(
-                match_id=match.id,
-                name=f"Team {side}",
-                side=side,
-                captain_id=0
-            )
-            session.add(team)
-            await session.flush()
-
-        result = await session.execute(
-            select(TeamMember).where(
-                TeamMember.team_id == team.id,
-                TeamMember.telegram_id ==
-                call.from_user.id
-            )
-        )
-        existing = result.scalar_one_or_none()
-
-        if existing:
-            await call.answer(
-                "You already joined this team!",
-                show_alert=True
-            )
-            return
-
-        player = TeamMember(
-            team_id=team.id,
-            telegram_id=call.from_user.id,
-            display_name=(
-                call.from_user.full_name[:128]
-            ),
-            is_captain=False
-        )
-
-        session.add(player)
-        await session.commit()
-
-        await call.answer(
-            f"Joined Team {side}!"
-        )
 
 # ============== CREATE MATCH ==============
 
@@ -544,7 +322,6 @@ async def set_wickets(call: CallbackQuery):
 
     await call.answer("Match created!")
 
-
 # ============== JOIN TEAM ==============
 
 @router.callback_query(F.data.startswith("join:"))
@@ -574,6 +351,9 @@ async def join_team(call: CallbackQuery):
                 "Match is not available!",
                 show_alert=True
             )
+            return
+
+        if not await require_group_message(call, match):
             return
 
         result = await session.execute(
@@ -627,6 +407,7 @@ async def join_team(call: CallbackQuery):
         f"Joined Team {side}!",
         show_alert=True
     )
+
 
 # ============== ADMIN PANEL ==============
 
@@ -871,7 +652,6 @@ async def choose_captain_team(call: CallbackQuery):
 
     await call.answer()
 
-
 @router.callback_query(F.data.startswith("captainset:"))
 async def set_new_captain(call: CallbackQuery):
     parts = call.data.split(":")
@@ -953,6 +733,7 @@ async def set_new_captain(call: CallbackQuery):
         f"of {team.name}!"
     )
     await call.answer("Captain updated!")
+
 
 # ============== SELECT BATSMAN ==============
 
@@ -1194,6 +975,110 @@ async def set_bowler(call: CallbackQuery):
     )
     await call.answer("Bowler selected!")
 
+
+# ============== START MATCH COMMAND ==============
+
+@router.message(Command("startmatch"))
+async def start_match_command(message: Message):
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Start the match inside its Telegram group.")
+        return
+
+    async with SessionLocal() as session:
+        match = await get_active_match(session, message.chat.id)
+
+        if not match:
+            await message.answer("⛔ No match found. Use /newmatch first.")
+            return
+
+        if match.status != "setup":
+            await message.answer("⛔ This match is already live or completed.")
+            return
+
+        if not await is_host_or_admin(
+            message.bot, match, message.from_user.id
+        ):
+            await message.answer("⛔ Only Host / Group Admin can start the match.")
+            return
+
+        if not match.overs or not match.wickets_limit:
+            await message.answer("⛔ Select overs and wickets first.")
+            return
+
+        # Both teams must exist and have at least one joined player.
+        result = await session.execute(
+            select(Team).where(Team.match_id == match.id)
+        )
+        teams = result.scalars().all()
+
+        team_by_side = {team.side: team for team in teams}
+        if "A" not in team_by_side or "B" not in team_by_side:
+            await message.answer("⛔ Both teams must be created first.")
+            return
+
+        for side in ("A", "B"):
+            result = await session.execute(
+                select(TeamMember.telegram_id).where(
+                    TeamMember.team_id == team_by_side[side].id
+                ).limit(1)
+            )
+            if result.scalar_one_or_none() is None:
+                await message.answer(
+                    f"⛔ Team {side} has no players. Players must join both teams."
+                )
+                return
+
+        if not match.striker_id:
+            await message.answer("⛔ Select the striker using /selectbatter first.")
+            return
+
+        if not match.bowler_id:
+            await message.answer("⛔ Select the bowler using /selectbowler first.")
+            return
+
+        batting_team = team_by_side.get(match.batting_side)
+        bowling_side = "B" if match.batting_side == "A" else "A"
+        bowling_team = team_by_side.get(bowling_side)
+
+        if not batting_team or not bowling_team:
+            await message.answer("⛔ Batting or bowling team is missing.")
+            return
+
+        result = await session.execute(
+            select(TeamMember.telegram_id).where(
+                TeamMember.team_id == batting_team.id,
+                TeamMember.telegram_id == match.striker_id
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            await message.answer("⛔ Selected striker is not in the batting team.")
+            return
+
+        result = await session.execute(
+            select(TeamMember.telegram_id).where(
+                TeamMember.team_id == bowling_team.id,
+                TeamMember.telegram_id == match.bowler_id
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            await message.answer("⛔ Selected bowler is not in the bowling team.")
+            return
+
+        match.status = "live"
+        await session.commit()
+
+        match_id = match.id
+        overs = match.overs
+        wickets = match.wickets_limit
+
+    await message.answer(
+        "🏏 MATCH STARTED!\n\n"
+        f"Overs: {overs} | Wickets: {wickets}\n"
+        "The selected bowler can now record the score.",
+        reply_markup=score_kb(match_id)
+    )
+
+
 # ============== START BOWLING ==============
 
 @router.callback_query(F.data.startswith("bowl:"))
@@ -1308,6 +1193,7 @@ async def score_extra(call: CallbackQuery):
         match_id,
         extra_type=extra_type
     )
+
 
 # ============== UPDATE SCORE ==============
 
